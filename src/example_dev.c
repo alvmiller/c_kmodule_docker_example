@@ -23,6 +23,7 @@ make clean
 make
 chmod +x script_docker_host.sh
 ./script_docker_host.sh
+//sudo ./script_docker_host.sh
 --
 Docker:
 cd /root
