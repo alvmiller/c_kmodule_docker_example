@@ -19,16 +19,16 @@ int main()
 	close(fd0);
 	printf("Closed 0\n");
 
-	FILE *f = fopen("/proc/example_dev", "r+");
-	if(f < 0) {
-		perror("Can't open 1");
+	FILE *f0 = fopen("/proc/example_dev", "r+");
+	if(f0 < 0) {
+		perror("Can't fopen 0");
 		return -1;
 	}
-	int fd1 = fileno(f);
-	printf("Opened 1\n");
+	int fd1 = fileno(f0);
+	printf("FOpened 0\n");
 	fsync(fd1);
-	fclose(f);
-	printf("Closed 1\n");
+	fclose(f0);
+	printf("FClosed 0\n");
 
 	return 0;
 }
