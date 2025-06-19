@@ -21,4 +21,12 @@ gcc -o init_drv_client init_drv_client.c
 sleep 1
 echo -e "\n"
 
-sudo docker run -it --privileged --hostname docker --mount "type=bind,src=$PWD,dst=/root" ubuntu
+#sudo docker run \
+#	-v /dev/:/root/dev_ex/ \
+#	...
+sudo docker run \
+	-it \
+	--privileged --cap-add SYS_MODULE \
+	--hostname docker \
+	--mount "type=bind,src=$PWD,dst=/root" \
+	ubuntu
