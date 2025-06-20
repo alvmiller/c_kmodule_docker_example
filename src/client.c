@@ -10,25 +10,43 @@
 
 int main()
 {
-	int fd0 = open("/proc/example_dev", O_RDWR);
-	if(fd0 < 0) {
-		perror("Can't open 0");
+#if defined (HOST_DEV_PROC_DRV)
+	int fd_dev = open("/dev/example_dev", O_RDWR);
+	if(fd_dev < 0) {
+		perror("/dev can't be open");
 		return -1;
 	}
-	printf("Opened 0\n");
-	close(fd0);
-	printf("Closed 0\n");
+	printf("/dev: Opened\n");
+	const char *wr_buf = "Data from Client";
+	printf("Try to write: %s \n", wr_buf);
+	(void)write(fd_dev, wr_buf, strlen(wr_buf));
+	#define RD_BUF_SIZE (50)
+	unsigned char rd_buf[RD_BUF_SIZE] = {};
+	(void)read(fd_dev, rd_buf, RD_BUF_SIZE);
+	printf("Read data: %s \n", rd_buf);
+	close(fd_dev);
+	printf("/dev: Closed\n");
+#endif
 
-	FILE *f0 = fopen("/proc/example_dev", "r+");
-	if(f0 < 0) {
-		perror("Can't fopen 0");
+	int fd_proc = open("/proc/example_dev", O_RDWR);
+	if(fd_proc < 0) {
+		perror("/proc can't be open");
 		return -1;
 	}
-	int fd1 = fileno(f0);
-	printf("FOpened 0\n");
-	fsync(fd1);
-	fclose(f0);
-	printf("FClosed 0\n");
+	printf("/proc: Opened\n");
+	close(fd_proc);
+	printf("/proc: Closed\n");
+
+	FILE *file = fopen("/proc/example_dev", "r+");
+	if(file < 0) {
+		perror("/proc can't be fopen");
+		return -1;
+	}
+	int fd_tmp = fileno(file);
+	printf("/proc: FOpened\n");
+	fsync(fd_tmp);
+	fclose(file);
+	printf("/proc: FClosed\n");
 
 	return 0;
 }
