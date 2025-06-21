@@ -11,7 +11,7 @@
 int main()
 {
 #if defined (HOST_DEV_PROC_DRV)
-	int fd_dev = open("/dev/example_dev", O_RDWR);
+	int fd_dev = open("/dev/example_dev-0", O_RDWR);
 	if(fd_dev < 0) {
 		perror("/dev can't be open");
 		return -1;
