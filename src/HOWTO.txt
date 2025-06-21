@@ -1,4 +1,6 @@
 /*
+https://www.markdownguide.org/basic-syntax/
+
 https://xcellerator.github.io/posts/docker_escape/
 https://github.com/xcellerator/linux_kernel_hacking/tree/079d97b8e0b25e437ea4d5aa2fa4e85feff67583/3_RootkitTechniques/3.8_privileged_container_escaping
 
