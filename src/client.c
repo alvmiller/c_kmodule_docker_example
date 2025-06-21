@@ -46,7 +46,7 @@ int main()
 		printf("\tError: Not full len wrote\n");
 	}
 
-	#define RD_BUF_SIZE (50)
+	#define RD_BUF_SIZE (29)
 	unsigned char rd_buf[RD_BUF_SIZE] = {};
 	//(void)read(fd_dev, rd_buf, RD_BUF_SIZE);
 	buf = rd_buf;
@@ -63,8 +63,9 @@ int main()
 		buf += ret;
 		printf("\tError: Not full len read\n");
 	}
-	printf("Read data: %s \n", rd_buf);
+	printf("Read data: %s\n", rd_buf);
 
+	//if (ioctl(fd, cmd, buffer) < 0)
 	ret = ioctl(fd_dev, 0x01);
 	if (ret == -1) {
 		perror("\tCannot use ioctl()");
