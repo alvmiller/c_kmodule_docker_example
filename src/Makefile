@@ -17,4 +17,5 @@ test:
  
 clean:
 	make -C $(KERNELDIR)  M=$(PWD) clean
-	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions *.ko.h ./client ./client_host ./init_drv_client
+	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions *.ko.h
+	rm -rf ./client ./client_host ./init_drv_client
