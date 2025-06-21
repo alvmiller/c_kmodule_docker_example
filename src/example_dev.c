@@ -16,6 +16,7 @@
 #include <linux/path.h>
 #include <linux/mount.h>
 #include <linux/dcache.h>
+#include <linux/sched.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("user1");
@@ -25,32 +26,39 @@ MODULE_VERSION("0.001");
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
 #endif
 
-//------------------------------------------------------------------------------
-
-#define DRV_NAME "example_dev"
+//----------------------------------------------------------------------------//
 
 static void print_module_name(void)
 {
 	if (THIS_MODULE != NULL) {
-		printk("Current module name: %s\n", THIS_MODULE->name);
-		pr_info("Current module version = %s\n", THIS_MODULE->version);
+		printk("\tCurrent module name: %s\n", THIS_MODULE->name);
+		printk("\tCurrent module version = %s\n", THIS_MODULE->version);
 	}
 	if (THIS_MODULE == NULL) {
-		printk("Current module name: %s\n", module_name(THIS_MODULE));
+		printk("\tCurrent module name: %s\n", module_name(THIS_MODULE));
 	}
-	printk("hostname: %s\n", utsname()->nodename);
+	printk("\thostname: %s\n", utsname()->nodename);
+	printk("\tInitialize module: %s\n", KBUILD_MODNAME);
+	return;
 }
 
 static void print_file_name(struct file * const file)
 {
-	printk("File: %s\n", file->f_path.dentry->d_name.name);
+	printk("\tFile: %s\n", file->f_path.dentry->d_name.name);
+	return;
 }
+
+//----------------------------------------------------------------------------//
+
+//----------------------------------------------------------------------------//
+
+#define DRV_NAME "example_dev"
 
 static int drv_open(struct inode *inode, struct file *file)
 {
 	(void)inode;
 	(void)file;
-	pr_info("Device open()\n");
+	pr_info("\tDevice open()\n");
 	print_module_name();
 	return 0;
 }
@@ -60,7 +68,7 @@ static int drv_release(struct inode *inode, struct file *file)
 	(void)inode;
 	(void)file;
 	print_module_name();
-	pr_info("Device release()\n");
+	pr_info("\tDevice release()\n");
 	return 0;
 }
 
@@ -71,19 +79,20 @@ static ssize_t drv_read(
 	loff_t *offset)
 {
 	(void)file;
-	printk("Device read()\n");
+	pr_info("\tDevice read()\n");
+	print_module_name();
 	print_file_name(file);
 	
 	if (buf == NULL || offset == NULL) {
-		printk("Device read(): Bad parameters!\n");
+		pr_err("\tDevice read(): Bad parameters!\n");
 		return -EINVAL;
 	}
 	if (count == 0) {
-		printk("Device read(): Action is not needed!\n");
+		pr_err("\tDevice read(): Action is not needed!\n");
 		return 0;
 	}
     
-	uint8_t *data = "Hello from the kernel world.\n";
+	uint8_t *data = "Hello from the kernel world.";
 	size_t datalen = strlen(data) + 1;
 
 	if (count > datalen) {
@@ -105,15 +114,16 @@ static ssize_t drv_write(
 	loff_t *offset)
 {
 	(void)file;
-	printk("Device write()\n");
+	pr_info("\tDevice write()\n");
+	print_module_name();
 	print_file_name(file);
 
 	if (buf == NULL || offset == NULL) {
-		printk("Device write(): Bad parameters!\n");
+		pr_err("\tDevice write(): Bad parameters!\n");
 		return -EINVAL;
 	}
 	if (count == 0) {
-		printk("Device write(): Action is not needed!\n");
+		pr_err("\tDevice write(): Action is not needed!\n");
 		return 0;
 	}
 
@@ -128,13 +138,13 @@ static ssize_t drv_write(
 
 	ncopied = copy_from_user(databuf, buf, maxdatalen);
 	if (ncopied == 0) {
-		printk("Copied %zd bytes from the user\n", maxdatalen);
+		printk("\tCopied %zd bytes from the user\n", maxdatalen);
 	} else {
-		printk("Could't copy %zd bytes from the user\n", ncopied);
+		printk("\tCould't copy %zd bytes from the user\n", ncopied);
 	}
 	databuf[maxdatalen] = 0;
 
-	printk("Data from the user: %s\n", databuf);
+	printk("\tData from the user: %s\n", databuf);
 	*offset += count;
 	return count;
 }
@@ -145,25 +155,33 @@ static long int drv_ioctl(
 	unsigned long ioctl_param)
 {
 	(void)file;
-	printk("Device ioctl()\n");
+	pr_info("\tDevice ioctl()\n");
+	print_module_name();
 	print_file_name(file);
 
-	printk("ioctl_num: %u\n", ioctl_num);
+	//struct my_device_data *my_data =
+	//	(struct my_device_data*) file->private_data;
+	//my_ioctl_data mid;
+
 	switch (ioctl_num) {
 	case 0x1:
-		printk("ioctl() called with correct command\n");
+		//if( copy_from_user(&mid, (my_ioctl_data *) arg,
+		//	sizeof(my_ioctl_data)) )
+		//temp = (char *)ioctl_param;
+		//if (copy_to_user((uint32_t*) arg, &value, sizeof(value)))
+		printk("\tioctl() called with correct command\n");
 		break;
 	default:
-		printk("ioctl() called with unknown command\n");
+		pr_err("\tioctl() called with unknown command\n");
 		return -EINVAL;
 	}
 
 	return 0;
 }
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------------------------//
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------------------------//
 
 static const struct proc_ops proc_fops = {
 	.proc_open    = drv_open,
@@ -176,24 +194,24 @@ static int create_proc(void)
 {
 	struct proc_dir_entry *proc_file_entry_escape = 
 		proc_create(DRV_NAME, 0777, NULL, &proc_fops);
-	if( proc_file_entry_escape == NULL ) {
-		printk(KERN_ALERT "Can't register /proc\n");
+	if (proc_file_entry_escape == NULL) {
+		pr_err("Can't register /proc\n");
 		return -ENOMEM;
 	}
-	printk(KERN_ALERT "Registered /proc\n");
+	printk("Registered /proc\n");
 	return 0;
 }
 
 static void remove_proc(void)
 {
 	remove_proc_entry(DRV_NAME, NULL);
-	printk(KERN_ALERT "Removed /proc\n");
+	printk("Removed /proc\n");
 	return;
 }
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------------------------//
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------------------------//
 
 #define MAX_DEV (2)
 dev_t dev;
@@ -202,12 +220,12 @@ static int dev_major = 0;
 struct cdev drv_cdev[MAX_DEV];
 
 static const struct file_operations dev_fops = {
-	.owner            = THIS_MODULE,
-	.open             = drv_open,
-	.release          = drv_release,
-	.read             = drv_read,
-	.write            = drv_write,
-	.unlocked_ioctl   = drv_ioctl,
+	.owner          = THIS_MODULE,
+	.open           = drv_open,
+	.release        = drv_release,
+	.read           = drv_read,
+	.write          = drv_write,
+	.unlocked_ioctl = drv_ioctl,
 };
 
 static int dev_uevent(const struct device *dev, struct kobj_uevent_env *env)
@@ -220,14 +238,14 @@ static int dev_uevent(const struct device *dev, struct kobj_uevent_env *env)
 static int init_dev(void)
 {
 	if((alloc_chrdev_region(&dev, 0, MAX_DEV, DRV_NAME"_region")) < 0) {
-		pr_info("Cannot allocate major number\n");
+		pr_err("Cannot allocate major number\n");
 		return -1;
 	}
 
 	dev_major = MAJOR(dev);
 
 	if(IS_ERR(dev_class = class_create(DRV_NAME"_class"))) {
-		pr_info("Cannot create the struct class\n");
+		pr_err("Cannot create the struct class\n");
 		goto err_class;
 	}
 	dev_class->dev_uevent = dev_uevent;
@@ -237,17 +255,20 @@ static int init_dev(void)
 		drv_cdev[i].owner = THIS_MODULE;
 
 		if((cdev_add(&drv_cdev[i], MKDEV(dev_major, i), 1)) < 0) {
-			pr_info("Cannot add the device to the system (%d)\n", i);
+			pr_err("Cannot add the device to the system (%d)\n",
+				i);
 			goto err_device;
 		}
 
-		if (IS_ERR(device_create(dev_class, NULL, MKDEV(dev_major, i), NULL, DRV_NAME"-%d", i))) {
-			pr_info("Cannot create the Device-%d\n", i);
+		if (IS_ERR(device_create(
+			dev_class, NULL, MKDEV(dev_major, i), NULL,
+			DRV_NAME"-%d", i))) {
+			pr_err("Cannot create the Device-%d\n", i);
 			goto err_device;
 		}
 	}
 
-	printk(KERN_ALERT "Inserted /dev\n");
+	printk("Inserted /dev\n");
 	return 0;
 
 err_device:
@@ -267,13 +288,14 @@ static void destroy_dev(void)
         	cdev_del(&drv_cdev[i]);
     	}
 	unregister_chrdev_region(MKDEV(dev_major, 0), MAX_DEV);
-	printk(KERN_ALERT "Destroyed /dev\n");
+	printk("Destroyed /dev\n");
+	return;
 }
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------------------------//
 
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------------------------//
 
 static int __init example_init(void)
 {
@@ -289,18 +311,21 @@ static int __init example_init(void)
 		return res;
 	}
 
+	print_module_name();
 	return 0;
 }
 
 static void __exit example_exit(void)
 {
-	printk(KERN_ALERT "Goodbye\n");
-
-	remove_proc();
+	print_module_name();
 	destroy_dev();
+	remove_proc();
+
+	printk(KERN_ALERT "Goodbye\n");
+	return;
 }
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------------------------//
 
 module_init(example_init);
 module_exit(example_exit);
