@@ -25,9 +25,11 @@ https://man7.org/linux/man-pages/man3/errno.3.html
 
 https://embetronicx.com/tutorials/linux/device-drivers/ioctl-tutorial-in-linux/
 https://github.com/pokitoz/ioctl_driver
+https://github.com/pokitoz/ioctl_driver/blob/main/dev/ioctl_interface.c
 https://linux.die.net/lkmpg/x892.html
 https://github.com/Tristaan/linux-driver-ioctl-example/tree/main
 https://www.ibm.com/docs/en/zos/2.4.0?topic=functions-ioctl-control-device
+https://github.com/Tristaan/linux-driver-ioctl-example/blob/main/userspace.c
 
 
 Host:
