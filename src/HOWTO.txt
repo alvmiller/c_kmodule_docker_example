@@ -31,6 +31,7 @@ sudo insmod example_dev.ko
 lsmod | grep example_dev
 ls -la /dev/ | grep example_dev
 ls -la /proc/ | grep example_dev
+ls -la /sys/class/ | grep example_dev
 sudo ./client_host
 sudo su
 echo Test0 >/dev/example_dev
