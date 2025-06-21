@@ -13,74 +13,6 @@
 #include <linux/uaccess.h>
 #include <linux/err.h>
 
-/*
-https://xcellerator.github.io/posts/docker_escape/
-https://github.com/xcellerator/linux_kernel_hacking/tree/079d97b8e0b25e437ea4d5aa2fa4e85feff67583/3_RootkitTechniques/3.8_privileged_container_escaping
-
-https://olegkutkov.me/2018/03/14/simple-linux-character-device-driver/
-https://linux-kernel-labs.github.io/refs/heads/master/labs/device_drivers.html
-https://github.com/ichergui/char-device
-https://flusp.ime.usp.br/kernel/char-drivers-intro/
-https://dev.to/bytehackr/unlocking-the-power-of-linux-device-drivers-1llh
-https://www.oreilly.com/library/view/linux-device-drivers/0596005903/ch03.html
-https://freebsdfoundation.org/our-work/journal/browser-based-edition/kernel-development/character-device-driver-tutorial/
-https://docs.oracle.com/cd/E19683-01/806-5222/character-21002/index.html
-https://linuxjourney.com/lesson/dev-directory
-
-
-Host:
-sudo apt-get update && \
-sudo apt-get -y install \
-	dkms openssl xxd linux-headers-$(uname -r) \
-	gcc make build-essential libncurses-dev bison flex libssl-dev libelf-dev dwarves kmod \
-	linux-headers-`uname -r`
-sudo apt -y install docker.io
-
-Host:
-make clean
-chmod +x script_docker_host.sh
-./script_docker_host.sh
-//sudo ./script_docker_host.sh
-sudo dmesg -C
-sudo insmod example_dev.ko
-sudo ./client_host
-sudo su
-echo Test0 >/dev/example_dev
-cat /dev/example_dev
-exit
-head -c29 /dev/example_dev
-echo "Hello from the user" > /dev/example_dev
-sudo tail -n5 /var/log/messages
-sudo rmmod example_dev
-sudo dmesg
-sleep 2
-#sudo docker run \
-#	-v /dev/:/root/dev_ex/:rw \
-#	...
-sudo docker run \
-	-it \
-	--privileged --cap-add SYS_MODULE \
-	--hostname docker \
-	--mount "type=bind,src=$PWD,dst=/root" \
-	ubuntu
---
-Docker:
-cd /root
-dmesg -C
-./init_drv_client.c
-ls -la /proc/example_dev
-ls -la /dev/example_dev
-./client
-dmesg
-exit
---
-Host:
-ls -la /dev/example_dev
-lsmod | grep example_dev
-sudo rmmod example_dev
-make clean
-*/
-
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("user1");
 MODULE_DESCRIPTION("kernel-docker-test-01");
@@ -89,18 +21,20 @@ MODULE_VERSION("0.001");
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
 #endif
 
-dev_t dev;
-static struct class *dev_class;
-static struct cdev drv_cdev;
+//------------------------------------------------------------------------------
 
 static int drv_open(struct inode *inode, struct file *file)
 {
+	(void)inode;
+	(void)file;
 	pr_info("Device open()\n");
 	return 0;
 }
 
 static int drv_release(struct inode *inode, struct file *file)
 {
+	(void)inode;
+	(void)file;
 	pr_info("Device release()\n");
 	return 0;
 }
@@ -111,6 +45,8 @@ static ssize_t drv_read(
 	size_t count,
 	loff_t *offset)
 {
+	(void)file;
+	(void)offset;
 	printk("Device read()\n");
     
 	uint8_t *data = "Hello from the kernel world!\n";
@@ -133,6 +69,8 @@ static ssize_t drv_write(
 	size_t count,
 	loff_t *offset)
 {
+	(void)file;
+	(void)offset;
 	printk("Device write()\n");
 
 	#define MAX_DATA_LEN (30)
@@ -156,19 +94,15 @@ static ssize_t drv_write(
 	return count;
 }
 
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
+
 static const struct proc_ops proc_fops = {
 	.proc_open    = drv_open,
 	.proc_release = drv_release,
 	.proc_read    = drv_read,
 	.proc_write   = drv_write,
-};
-
-static const struct file_operations dev_fops = {
-	.owner   = THIS_MODULE,
-	.open    = drv_open,
-	.release = drv_release,
-	.read    = drv_read,
-	.write   = drv_write,
 };
 
 static int create_proc(void)
@@ -190,29 +124,60 @@ static void remove_proc(void)
 	return;
 }
 
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
+
+#define MAX_DEV (2)
+dev_t dev;
+static struct class *dev_class = NULL;
+static int dev_major = 0;
+struct cdev drv_cdev[MAX_DEV];
+
+static const struct file_operations dev_fops = {
+	.owner   = THIS_MODULE,
+	.open    = drv_open,
+	.release = drv_release,
+	.read    = drv_read,
+	.write   = drv_write,
+};
+
+static int dev_uevent(const struct device *dev, struct kobj_uevent_env *env)
+{
+	(void)dev;
+	add_uevent_var(env, "DEVMODE=%#o", 0777);
+	return 0;
+}
+
 static int init_dev(void)
 {
-	if((alloc_chrdev_region(&dev, 0, 1, "example_dev_region")) < 0) {
+	if((alloc_chrdev_region(&dev, 0, MAX_DEV, "example_dev_region")) < 0) {
 		pr_info("Cannot allocate major number\n");
 		return -1;
 	}
 
-	cdev_init(&drv_cdev, &dev_fops);
-
-	if((cdev_add(&drv_cdev, dev, 1)) < 0){
-		pr_info("Cannot add the device to the system\n");
-		goto err_class;
-	}
+	dev_major = MAJOR(dev);
 
 	//if(IS_ERR(dev_class = class_create(THIS_MODULE, "example_dev"))) {
-	if(IS_ERR(dev_class = class_create("example_dev_class"))){
+	if(IS_ERR(dev_class = class_create("example_dev_class"))) {
 		pr_info("Cannot create the struct class\n");
 		goto err_class;
 	}
+	dev_class->dev_uevent = dev_uevent;
 
-	if(IS_ERR(device_create(dev_class, NULL, dev, NULL, "example_dev"))) {
-		pr_info("Cannot create the Device\n");
-		goto err_device;
+	for (int i = 0; i < MAX_DEV; ++i) {
+		cdev_init(&drv_cdev[i], &dev_fops);
+		drv_cdev[i].owner = THIS_MODULE;
+
+		if((cdev_add(&drv_cdev[i], MKDEV(dev_major, i), 1)) < 0) {
+			pr_info("Cannot add the device to the system (%d)\n", i);
+			goto err_device;
+		}
+
+		if (IS_ERR(device_create(dev_class, NULL, MKDEV(dev_major, i), NULL, "example_dev-%d", i))) {
+			pr_info("Cannot create the Device-%d\n", i);
+			goto err_device;
+		}
 	}
 
 	printk(KERN_ALERT "Inserted /dev\n");
@@ -221,18 +186,27 @@ static int init_dev(void)
 err_device:
 	class_destroy(dev_class);
 err_class:
-	unregister_chrdev_region(dev, 1);
+	unregister_chrdev_region(dev, MAX_DEV);
 	return -1;
 }
 
 static void destroy_dev(void)
 {
-	device_destroy(dev_class, dev);
+	for (int i = 0; i < MAX_DEV; ++i) {
+        	device_destroy(dev_class, MKDEV(dev_major, i));
+    	}
 	class_destroy(dev_class);
-	cdev_del(&drv_cdev);
-	unregister_chrdev_region(dev, 1);
+	for (int i = 0; i < MAX_DEV; ++i) {
+        	cdev_del(&drv_cdev[i]);
+    	}
+	unregister_chrdev_region(MKDEV(dev_major, 0), MAX_DEV);
 	printk(KERN_ALERT "Destroyed /dev\n");
 }
+
+//------------------------------------------------------------------------------
+
+
+//------------------------------------------------------------------------------
 
 static int __init example_init(void)
 {
@@ -258,6 +232,8 @@ static void __exit example_exit(void)
 	remove_proc();
 	destroy_dev();
 }
+
+//------------------------------------------------------------------------------
 
 module_init(example_init);
 module_exit(example_exit);
