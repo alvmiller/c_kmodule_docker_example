@@ -1,0 +1,74 @@
+/*
+https://xcellerator.github.io/posts/docker_escape/
+https://github.com/xcellerator/linux_kernel_hacking/tree/079d97b8e0b25e437ea4d5aa2fa4e85feff67583/3_RootkitTechniques/3.8_privileged_container_escaping
+
+https://olegkutkov.me/2018/03/14/simple-linux-character-device-driver/
+https://linux-kernel-labs.github.io/refs/heads/master/labs/device_drivers.html
+https://github.com/ichergui/char-device
+https://flusp.ime.usp.br/kernel/char-drivers-intro/
+https://dev.to/bytehackr/unlocking-the-power-of-linux-device-drivers-1llh
+https://www.oreilly.com/library/view/linux-device-drivers/0596005903/ch03.html
+https://freebsdfoundation.org/our-work/journal/browser-based-edition/kernel-development/character-device-driver-tutorial/
+https://docs.oracle.com/cd/E19683-01/806-5222/character-21002/index.html
+https://linuxjourney.com/lesson/dev-directory
+
+
+Host:
+sudo apt-get update && \
+sudo apt-get -y install \
+	dkms openssl xxd linux-headers-$(uname -r) \
+	gcc make build-essential libncurses-dev bison flex libssl-dev libelf-dev dwarves kmod \
+	linux-headers-`uname -r`
+sudo apt -y install docker.io
+
+Host:
+make clean
+chmod +x script_docker_host.sh
+./script_docker_host.sh
+//sudo ./script_docker_host.sh
+sudo dmesg -C
+sudo insmod example_dev.ko
+lsmod | grep example_dev
+ls -la /dev/ | grep example_dev
+ls -la /proc/ | grep example_dev
+sudo ./client_host
+sudo su
+echo Test0 >/dev/example_dev
+cat /dev/example_dev
+exit
+head -c29 /dev/example_dev
+echo "Hello from the user" > /dev/example_dev
+sudo tail -n5 /var/log/messages
+sudo rmmod example_dev
+lsmod | grep example_dev
+ls -la /dev/ | grep example_dev
+ls -la /proc/ | grep example_dev
+sudo dmesg
+sleep 2
+#sudo docker run \
+#	-v /dev/:/root/dev_ex/:rw \
+#	...
+sudo docker run \
+	-it \
+	--privileged --cap-add SYS_MODULE \
+	--hostname docker \
+	--mount "type=bind,src=$PWD,dst=/root" \
+	ubuntu
+--
+Docker:
+cd /root
+dmesg -C
+./init_drv_client.c
+ls -la /proc/example_dev
+ls -la /dev/example_dev
+./client
+dmesg
+exit
+--
+Host:
+lsmod | grep example_dev
+ls -la /dev/ | grep example_dev
+ls -la /proc/ | grep example_dev
+sudo rmmod example_dev
+make clean
+*/
