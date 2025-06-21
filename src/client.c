@@ -7,23 +7,70 @@
 #include <unistd.h>
 #include <errno.h>
 #include <stdint.h>
+#include <sys/ioctl.h>
 
 int main()
 {
 #if defined (HOST_DEV_PROC_DRV)
+	errno = 0;
+	ssize_t ret = -1;
+
 	int fd_dev = open("/dev/example_dev-0", O_RDWR);
 	if(fd_dev < 0) {
 		perror("/dev can't be open");
 		return -1;
 	}
 	printf("/dev: Opened\n");
-	const char *wr_buf = "Data from Client";
+
+	const char *wr_buf = "Hello from Client.";
 	printf("Try to write: %s \n", wr_buf);
-	(void)write(fd_dev, wr_buf, strlen(wr_buf));
+	const ssize_t data_size = strlen(wr_buf);
+	ssize_t len = data_size;
+	char *buf = wr_buf;
+	//(void)write(fd_dev, wr_buf, strlen(wr_buf));
+	while (len != 0 && ((ret = write(fd_dev, buf, len)) != data_size)) {
+		printf("\tError: Not all data had been written (ret = %zd)\n", ret);
+		if (ret == -1) {
+			perror("\tGot error");
+			if (errno == EINTR) {
+				continue;
+			}
+			if (errno == ENOSPC || errno == EDQUOT) {
+				printf("\tError: No Space\n");
+				break;
+			}
+			break;
+		}
+		len -= ret;
+		buf += ret;
+		printf("\tError: Not full len wrote\n");
+	}
+
 	#define RD_BUF_SIZE (50)
 	unsigned char rd_buf[RD_BUF_SIZE] = {};
-	(void)read(fd_dev, rd_buf, RD_BUF_SIZE);
+	//(void)read(fd_dev, rd_buf, RD_BUF_SIZE);
+	buf = rd_buf;
+	len = RD_BUF_SIZE;
+	while (len != 0 && (ret = read(fd_dev, buf, len)) != RD_BUF_SIZE) {
+		if (ret == -1) {
+			perror("\tGot error");
+			if (errno == EINTR) {
+				continue;
+			}
+			break;
+		}
+		len -= ret;
+		buf += ret;
+		printf("\tError: Not full len read\n");
+	}
 	printf("Read data: %s \n", rd_buf);
+
+	ret = ioctl(fd_dev, 0x01);
+	if (ret == -1) {
+		perror("\tCannot use ioctl()");
+	}
+	printf("/dev: ioctl() called\n");
+
 	close(fd_dev);
 	printf("/dev: Closed\n");
 #endif
