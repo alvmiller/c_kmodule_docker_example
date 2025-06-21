@@ -12,6 +12,10 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/err.h>
+#include <linux/utsname.h>
+#include <linux/path.h>
+#include <linux/mount.h>
+#include <linux/dcache.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("user1");
@@ -23,11 +27,31 @@ MODULE_VERSION("0.001");
 
 //------------------------------------------------------------------------------
 
+#define DRV_NAME "example_dev"
+
+static void print_module_name(void)
+{
+	if (THIS_MODULE != NULL) {
+		printk("Current module name: %s\n", THIS_MODULE->name);
+		pr_info("Current module version = %s\n", THIS_MODULE->version);
+	}
+	if (THIS_MODULE == NULL) {
+		printk("Current module name: %s\n", module_name(THIS_MODULE));
+	}
+	printk("hostname: %s\n", utsname()->nodename);
+}
+
+static void print_file_name(struct file * const file)
+{
+	printk("File: %s\n", file->f_path.dentry->d_name.name);
+}
+
 static int drv_open(struct inode *inode, struct file *file)
 {
 	(void)inode;
 	(void)file;
 	pr_info("Device open()\n");
+	print_module_name();
 	return 0;
 }
 
@@ -35,6 +59,7 @@ static int drv_release(struct inode *inode, struct file *file)
 {
 	(void)inode;
 	(void)file;
+	print_module_name();
 	pr_info("Device release()\n");
 	return 0;
 }
@@ -46,11 +71,20 @@ static ssize_t drv_read(
 	loff_t *offset)
 {
 	(void)file;
-	(void)offset;
 	printk("Device read()\n");
+	print_file_name(file);
+	
+	if (buf == NULL || offset == NULL) {
+		printk("Device read(): Bad parameters!\n");
+		return -EINVAL;
+	}
+	if (count == 0) {
+		printk("Device read(): Action is not needed!\n");
+		return 0;
+	}
     
-	uint8_t *data = "Hello from the kernel world!\n";
-	size_t datalen = strlen(data);
+	uint8_t *data = "Hello from the kernel world.\n";
+	size_t datalen = strlen(data) + 1;
 
 	if (count > datalen) {
 		count = datalen;
@@ -60,6 +94,7 @@ static ssize_t drv_read(
 		return -EFAULT;
 	}
 
+	*offset += count;
 	return count;
 }
 
@@ -70,12 +105,21 @@ static ssize_t drv_write(
 	loff_t *offset)
 {
 	(void)file;
-	(void)offset;
 	printk("Device write()\n");
+	print_file_name(file);
+
+	if (buf == NULL || offset == NULL) {
+		printk("Device write(): Bad parameters!\n");
+		return -EINVAL;
+	}
+	if (count == 0) {
+		printk("Device write(): Action is not needed!\n");
+		return 0;
+	}
 
 	#define MAX_DATA_LEN (30)
 	size_t maxdatalen = MAX_DATA_LEN;
-	uint8_t databuf[MAX_DATA_LEN];
+	uint8_t databuf[MAX_DATA_LEN + 1] = {};
 	size_t ncopied = 0;
 
 	if (count < maxdatalen) {
@@ -91,7 +135,30 @@ static ssize_t drv_write(
 	databuf[maxdatalen] = 0;
 
 	printk("Data from the user: %s\n", databuf);
+	*offset += count;
 	return count;
+}
+
+static long int drv_ioctl(
+	struct file *file,
+	unsigned int ioctl_num,
+	unsigned long ioctl_param)
+{
+	(void)file;
+	printk("Device ioctl()\n");
+	print_file_name(file);
+
+	printk("ioctl_num: %u\n", ioctl_num);
+	switch (ioctl_num) {
+	case 0x1:
+		printk("ioctl() called with correct command\n");
+		break;
+	default:
+		printk("ioctl() called with unknown command\n");
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -108,7 +175,7 @@ static const struct proc_ops proc_fops = {
 static int create_proc(void)
 {
 	struct proc_dir_entry *proc_file_entry_escape = 
-		proc_create("example_dev", 0777, NULL, &proc_fops);
+		proc_create(DRV_NAME, 0777, NULL, &proc_fops);
 	if( proc_file_entry_escape == NULL ) {
 		printk(KERN_ALERT "Can't register /proc\n");
 		return -ENOMEM;
@@ -119,7 +186,7 @@ static int create_proc(void)
 
 static void remove_proc(void)
 {
-	remove_proc_entry("example_dev", NULL);
+	remove_proc_entry(DRV_NAME, NULL);
 	printk(KERN_ALERT "Removed /proc\n");
 	return;
 }
@@ -135,11 +202,12 @@ static int dev_major = 0;
 struct cdev drv_cdev[MAX_DEV];
 
 static const struct file_operations dev_fops = {
-	.owner   = THIS_MODULE,
-	.open    = drv_open,
-	.release = drv_release,
-	.read    = drv_read,
-	.write   = drv_write,
+	.owner            = THIS_MODULE,
+	.open             = drv_open,
+	.release          = drv_release,
+	.read             = drv_read,
+	.write            = drv_write,
+	.unlocked_ioctl   = drv_ioctl,
 };
 
 static int dev_uevent(const struct device *dev, struct kobj_uevent_env *env)
@@ -151,15 +219,14 @@ static int dev_uevent(const struct device *dev, struct kobj_uevent_env *env)
 
 static int init_dev(void)
 {
-	if((alloc_chrdev_region(&dev, 0, MAX_DEV, "example_dev_region")) < 0) {
+	if((alloc_chrdev_region(&dev, 0, MAX_DEV, DRV_NAME"_region")) < 0) {
 		pr_info("Cannot allocate major number\n");
 		return -1;
 	}
 
 	dev_major = MAJOR(dev);
 
-	//if(IS_ERR(dev_class = class_create(THIS_MODULE, "example_dev"))) {
-	if(IS_ERR(dev_class = class_create("example_dev_class"))) {
+	if(IS_ERR(dev_class = class_create(DRV_NAME"_class"))) {
 		pr_info("Cannot create the struct class\n");
 		goto err_class;
 	}
@@ -174,7 +241,7 @@ static int init_dev(void)
 			goto err_device;
 		}
 
-		if (IS_ERR(device_create(dev_class, NULL, MKDEV(dev_major, i), NULL, "example_dev-%d", i))) {
+		if (IS_ERR(device_create(dev_class, NULL, MKDEV(dev_major, i), NULL, DRV_NAME"-%d", i))) {
 			pr_info("Cannot create the Device-%d\n", i);
 			goto err_device;
 		}
