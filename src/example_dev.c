@@ -17,6 +17,11 @@
 #include <linux/mount.h>
 #include <linux/dcache.h>
 #include <linux/sched.h>
+#include <linux/types.h>
+#include <linux/delay.h>
+#include <linux/mutex.h>
+
+//----------------------------------------------------------------------------//
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("user1");
@@ -25,6 +30,8 @@ MODULE_VERSION("0.001");
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
 #endif
+
+//----------------------------------------------------------------------------//
 
 //----------------------------------------------------------------------------//
 
@@ -46,6 +53,65 @@ static void print_file_name(struct file * const file)
 {
 	printk("\tFile: %s\n", file->f_path.dentry->d_name.name);
 	return;
+}
+
+//----------------------------------------------------------------------------//
+
+//----------------------------------------------------------------------------//
+
+static DEFINE_MUTEX(val_lock);
+
+enum Val_Operation {
+  INC_VAL_OP,
+  DEC_VAL_OP,
+  GET_VAL_OP
+};
+
+static inline long int do_val_operation(
+	enum Val_Operation op, struct file *file, uint8_t *res_val)
+{
+	static uint8_t value = 0;
+	long int ret = -1;
+
+	pr_info("\tDevice read()\n");
+	print_module_name();
+	print_file_name(file);
+
+	mutex_lock(&val_lock);
+	uint8_t tmp = 0;
+	switch (op) {
+	case INC_VAL_OP:
+		if ((value == U8_MAX)
+			|| __builtin_add_overflow(value, 1, &tmp)) {
+			return -EOVERFLOW;
+		}
+		msleep(100);
+		value = tmp;
+		ret = 0;
+		break;
+	case DEC_VAL_OP:
+		if ((value == 0) || __builtin_sub_overflow(value, 1, &tmp)) {
+			return -EOVERFLOW;
+		}
+		msleep(150);
+		value = tmp;
+		ret = 0;
+		break;
+	case GET_VAL_OP:
+		if (sizeof(long int) <= sizeof(*res_val)) {
+			return -EOVERFLOW;
+		}
+		msleep(200);
+		*res_val = value;
+		ret = 0;
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+	mutex_unlock(&val_lock);
+
+	return ret;
 }
 
 //----------------------------------------------------------------------------//
@@ -163,6 +229,7 @@ static long int drv_ioctl(
 	//	(struct my_device_data*) file->private_data;
 	//my_ioctl_data mid;
 
+	int ret = -1;
 	switch (ioctl_num) {
 	case 0x1:
 		//if( copy_from_user(&mid, (my_ioctl_data *) arg,
@@ -171,6 +238,29 @@ static long int drv_ioctl(
 		//if (copy_to_user((uint32_t*) arg, &value, sizeof(value)))
 		printk("\tioctl() called with correct command\n");
 		break;
+	case 0x10:
+		printk("\tioctl() Inc value command called\n");
+		ret = do_val_operation(INC_VAL_OP, file, NULL);
+		if (ret != 0) {
+			return ret;
+		}
+		break;
+	case 0x11:
+		printk("\tioctl() Dec value command called\n");
+		ret = do_val_operation(DEC_VAL_OP, file, NULL);
+		if (ret != 0) {
+			return ret;
+		}
+		break;
+	case 0x12: {
+			printk("\tioctl() Get value command called\n");
+			uint8_t tmp = 0;
+			ret = do_val_operation(INC_VAL_OP, file, &tmp);
+			if (ret != 0) {
+				return ret;
+			}
+			return (long int)tmp;
+		}
 	default:
 		pr_err("\tioctl() called with unknown command\n");
 		return -EINVAL;
@@ -327,5 +417,9 @@ static void __exit example_exit(void)
 
 //----------------------------------------------------------------------------//
 
+//----------------------------------------------------------------------------//
+
 module_init(example_init);
 module_exit(example_exit);
+
+//----------------------------------------------------------------------------//
