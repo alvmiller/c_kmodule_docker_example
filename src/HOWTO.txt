@@ -33,6 +33,26 @@ https://github.com/Tristaan/linux-driver-ioctl-example/tree/main
 https://www.ibm.com/docs/en/zos/2.4.0?topic=functions-ioctl-control-device
 https://github.com/Tristaan/linux-driver-ioctl-example/blob/main/userspace.c
 
+https://docs.kernel.org/timers/delay_sleep_functions.html
+https://linux-kernel-labs.github.io/refs/heads/master/labs/kernel_modules.html
+https://docs.kernel.org/timers/delay_sleep_functions.html
+https://embetronicx.com/tutorials/linux/device-drivers/linux-device-drivers-tutorial-kernel-thread/
+https://girishjoshi.io/post/creating-linux-kernel-threads/
+https://cylab.be/blog/347/linux-kernel-threads-and-processes-management-task-struct
+https://github.com/muratdemirtas/Linux-Kernel-Examples/blob/master/kernel-threads.c
+https://www.oreilly.com/library/view/linux-device-drivers/0596005903/ch08.html
+https://www.linkedin.com/pulse/memory-allocation-methods-linux-kernel-user-space-development-zhu-4llhc
+https://aeb.win.tue.nl/linux/lk/lk-5.html
+https://embetronicx.com/tutorials/linux/device-drivers/sending-signal-from-linux-device-driver-to-user-space/
+https://developer.ibm.com/articles/control-linux-kernel-extensions/
+https://www.c-pointers.com/LinuxDeviceDriver/basic_ldd/chapter2_kthreads/kthread_signal/kthread_signal.html
+https://embetronicx.com/tutorials/linux/device-drivers/example-linked-list-in-linux-kernel/
+https://medium.com/geekculture/the-linux-kernel-locking-api-and-shared-objects-1169c2ae88ff
+https://billauer.co.il/blog/2020/04/linux-kernel-lockless-atomic-smp/
+https://suyogb.hashnode.dev/chapter-1-the-kernel-locks-spinlock
+https://embetronicx.com/tutorials/linux/device-drivers/linux-device-driver-tutorial-mutex-in-linux-kernel/
+https://www.linkedin.com/pulse/synchronization-mechanisms-linux-kernel-mutex-vs-semaphore-kumar-fhmcc
+
 
 Host:
 sudo apt-get update && \
