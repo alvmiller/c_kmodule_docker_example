@@ -15,6 +15,7 @@ int main()
 	errno = 0;
 	ssize_t ret = -1;
 
+	printf("\n");
 	int fd_dev = open("/dev/example_dev-0", O_RDWR);
 	if(fd_dev < 0) {
 		perror("/dev can't be open");
@@ -72,10 +73,31 @@ int main()
 	}
 	printf("/dev: ioctl() called\n");
 
+	for (int i = 0; i < 6; ++i) {
+		ret = ioctl(fd_dev, 0x10);
+		if (ret == -1) {
+			perror("\tCannot use Inc ioctl()");
+		}
+		printf("/dev: Inc ioctl() called (%d)\n", i);
+	}
+
+	ret = ioctl(fd_dev, 0x11);
+	if (ret == -1) {
+		perror("\tCannot use Dec ioctl()");
+	}
+	printf("/dev: Dec ioctl() called\n");
+
+	ret = ioctl(fd_dev, 0x12);
+	if (ret == -1) {
+		perror("\tCannot use Get ioctl()");
+	}
+	printf("/dev: Get ioctl() called (%ld)-(%d)\n", ret, errno);
+
 	close(fd_dev);
 	printf("/dev: Closed\n");
 #endif
 
+	printf("\n");
 	int fd_proc = open("/proc/example_dev", O_RDWR);
 	if(fd_proc < 0) {
 		perror("/proc can't be open");
@@ -95,6 +117,7 @@ int main()
 	fsync(fd_tmp);
 	fclose(file);
 	printf("/proc: FClosed\n");
+	printf("\n");
 
 	return 0;
 }
