@@ -1,25 +1,27 @@
-#include <linux/version.h>
-#include <linux/init.h>
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/syscalls.h>
-#include <linux/proc_fs.h>
-#include <linux/umh.h>
-#include <linux/kdev_t.h>
-#include <linux/fs.h>
 #include <linux/cdev.h>
-#include <linux/device.h>
-#include <linux/slab.h>
-#include <linux/uaccess.h>
-#include <linux/err.h>
-#include <linux/utsname.h>
-#include <linux/path.h>
-#include <linux/mount.h>
 #include <linux/dcache.h>
-#include <linux/sched.h>
-#include <linux/types.h>
 #include <linux/delay.h>
+#include <linux/device.h>
+#include <linux/err.h>
+#include <linux/fs.h>
+#include <linux/init.h>
+#include <linux/kdev_t.h>
+#include <linux/kernel.h>
+#include <linux/list.h>
+#include <linux/module.h>
+#include <linux/mount.h>
 #include <linux/mutex.h>
+#include <linux/path.h>
+#include <linux/proc_fs.h>
+#include <linux/sched.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/syscalls.h>
+#include <linux/types.h>
+#include <linux/uaccess.h>
+#include <linux/umh.h>
+#include <linux/utsname.h>
+#include <linux/version.h>
 
 //----------------------------------------------------------------------------//
 
@@ -35,23 +37,34 @@ MODULE_VERSION("0.001");
 
 //----------------------------------------------------------------------------//
 
+#define GET_CURRENT_FILE_FULL_PATH(_file_)				\
+	({								\
+		const struct file *const __tmp_file__ = NULL;		\
+		typeof(__tmp_file__) _x = (__tmp_file__);		\
+		typeof(_file_) _y = (_file_);				\
+		(void)(&_x == &_y);					\
+		_file_->f_path.dentry->d_name.name;			\
+	})
+
 static void print_module_name(void)
 {
 	if (THIS_MODULE != NULL) {
 		printk("\tCurrent module name: %s\n", THIS_MODULE->name);
-		printk("\tCurrent module version = %s\n", THIS_MODULE->version);
+		printk("\tCurrent module version = %s\n",
+			THIS_MODULE->version);
 	}
 	if (THIS_MODULE == NULL) {
-		printk("\tCurrent module name: %s\n", module_name(THIS_MODULE));
+		printk("\tCurrent module name: %s\n",
+			module_name(THIS_MODULE));
 	}
 	printk("\thostname: %s\n", utsname()->nodename);
 	printk("\tInitialize module: %s\n", KBUILD_MODNAME);
 	return;
 }
 
-static void print_file_name(struct file * const file)
+static void print_file_name(const struct file * const file)
 {
-	printk("\tFile: %s\n", file->f_path.dentry->d_name.name);
+	printk("\tFile: %s\n", GET_CURRENT_FILE_FULL_PATH(file));
 	return;
 }
 
@@ -59,12 +72,66 @@ static void print_file_name(struct file * const file)
 
 //----------------------------------------------------------------------------//
 
-static DEFINE_MUTEX(val_lock);
+#define FILE_NAME_MAX (100)
+struct file_name_full_path_s {
+    //char *file_full_path_p;
+    char file_full_path[FILE_NAME_MAX];
+    struct list_head list;
+};
+
+static LIST_HEAD(file_full_path_list);
+
+static int add_file_name_node(const struct file * const file)
+{
+	if (file == NULL) {
+		return -EINVAL;
+	}
+
+	struct file_name_full_path_s *new_item = kzalloc(
+		sizeof(*new_item), GFP_ATOMIC);
+	if (new_item == NULL) {
+		return -ENOMEM;
+	}
+
+	const size_t dst_size = sizeof(new_item->file_full_path);
+	size_t len = strscpy(
+		new_item->file_full_path,
+		GET_CURRENT_FILE_FULL_PATH(file),
+		dst_size);
+	if (len == dst_size) {
+		kfree(new_item);
+		return -ENOMEM;
+	}
+	new_item->file_full_path[len + 1] = '\0';
+
+	list_add_tail(&new_item->list, &file_full_path_list);
+
+	return 0;
+}
+
+static void clear_all_file_name_nodes(void)
+{
+	struct file_name_full_path_s *item = NULL;
+	struct file_name_full_path_s *tmp = NULL;
+
+	list_for_each_entry_safe(item, tmp, &file_full_path_list, list) {
+		list_del(&item->list);
+		kfree(item);
+	}
+
+	return;
+}
+
+//----------------------------------------------------------------------------//
+
+//----------------------------------------------------------------------------//
+
+static DEFINE_MUTEX(value_lock);
 
 enum Val_Operation {
-  INC_VAL_OP,
-  DEC_VAL_OP,
-  GET_VAL_OP
+  INC_VAL_OP = 0x10,
+  DEC_VAL_OP = 0x11,
+  GET_VAL_OP = 0x12
 };
 
 static inline long int do_val_operation(
@@ -73,11 +140,11 @@ static inline long int do_val_operation(
 	static uint8_t value = 0;
 	long int ret = -1;
 
-	pr_info("\tDevice read()\n");
+	pr_info("\tDevice ioctl()\n");
 	print_module_name();
 	print_file_name(file);
 
-	mutex_lock(&val_lock);
+	mutex_lock(&value_lock);
 	uint8_t tmp = 0;
 	switch (op) {
 	case INC_VAL_OP:
@@ -101,6 +168,9 @@ static inline long int do_val_operation(
 		if (sizeof(long int) <= sizeof(*res_val)) {
 			return -EOVERFLOW;
 		}
+		if (res_val == NULL) {
+			return -EINVAL;
+		}
 		msleep(200);
 		*res_val = value;
 		ret = 0;
@@ -109,7 +179,7 @@ static inline long int do_val_operation(
 		ret = -EINVAL;
 		break;
 	}
-	mutex_unlock(&val_lock);
+	mutex_unlock(&value_lock);
 
 	return ret;
 }
@@ -225,17 +295,13 @@ static long int drv_ioctl(
 	print_module_name();
 	print_file_name(file);
 
-	//struct my_device_data *my_data =
-	//	(struct my_device_data*) file->private_data;
-	//my_ioctl_data mid;
+	//struct my_data *my_data = (struct my_data*)file->private_data;
+	//if (copy_from_user(&mid, (my_data *)arg,sizeof(my_data)))
+	//if (copy_to_user((uint32_t*) arg, &value, sizeof(value)))
 
 	int ret = -1;
 	switch (ioctl_num) {
 	case 0x1:
-		//if( copy_from_user(&mid, (my_ioctl_data *) arg,
-		//	sizeof(my_ioctl_data)) )
-		//temp = (char *)ioctl_param;
-		//if (copy_to_user((uint32_t*) arg, &value, sizeof(value)))
 		printk("\tioctl() called with correct command\n");
 		break;
 	case 0x10:
@@ -255,7 +321,7 @@ static long int drv_ioctl(
 	case 0x12: {
 			printk("\tioctl() Get value command called\n");
 			uint8_t tmp = 0;
-			ret = do_val_operation(INC_VAL_OP, file, &tmp);
+			ret = do_val_operation(GET_VAL_OP, file, &tmp);
 			if (ret != 0) {
 				return ret;
 			}
@@ -264,6 +330,11 @@ static long int drv_ioctl(
 	default:
 		pr_err("\tioctl() called with unknown command\n");
 		return -EINVAL;
+	}
+
+	if (add_file_name_node(file) != 0) {
+		pr_err("\tioctl() can't add call to list\n");
+		; // No Need Real Action
 	}
 
 	return 0;
@@ -408,6 +479,8 @@ static int __init example_init(void)
 static void __exit example_exit(void)
 {
 	print_module_name();
+
+	clear_all_file_name_nodes();
 	destroy_dev();
 	remove_proc();
 
