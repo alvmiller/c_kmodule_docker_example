@@ -14,6 +14,7 @@
 #include <linux/path.h>
 #include <linux/proc_fs.h>
 #include <linux/sched.h>
+#include <linux/signal.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/syscalls.h>
@@ -79,7 +80,7 @@ struct file_name_full_path_s {
     struct list_head list;
 };
 
-static LIST_HEAD(file_full_path_list);
+static LIST_HEAD(file_full_path_list_journal);
 
 static int add_file_name_node(const struct file * const file)
 {
@@ -104,7 +105,7 @@ static int add_file_name_node(const struct file * const file)
 	}
 	new_item->file_full_path[len + 1] = '\0';
 
-	list_add_tail(&new_item->list, &file_full_path_list);
+	list_add_tail(&new_item->list, &file_full_path_list_journal);
 
 	return 0;
 }
@@ -114,7 +115,11 @@ static void clear_all_file_name_nodes(void)
 	struct file_name_full_path_s *item = NULL;
 	struct file_name_full_path_s *tmp = NULL;
 
-	list_for_each_entry_safe(item, tmp, &file_full_path_list, list) {
+	list_for_each_entry_safe(
+		item,
+		tmp,
+		&file_full_path_list_journal,
+		list) {
 		list_del(&item->list);
 		kfree(item);
 	}
@@ -126,6 +131,7 @@ static void clear_all_file_name_nodes(void)
 
 //----------------------------------------------------------------------------//
 
+// atomic_t value_lock;
 static DEFINE_MUTEX(value_lock);
 
 enum Val_Operation {
@@ -139,6 +145,11 @@ static inline long int do_val_operation(
 {
 	static uint8_t value = 0;
 	long int ret = -1;
+
+	if (file == NULL) {
+		return -EINVAL;
+	}
+	WARN_ON(!!file);
 
 	pr_info("\tDevice ioctl()\n");
 	print_module_name();
@@ -455,6 +466,106 @@ static void destroy_dev(void)
 
 //----------------------------------------------------------------------------//
 
+//----------------------------------------------------------------------------//
+
+static struct task_struct *ext_thread0 = NULL;
+
+static int thread_function0(void *pv)
+{
+	(void)pv;
+
+	printk("\tThread function...\n");
+	while(!kthread_should_stop()) {
+		msleep(100);
+	}
+
+	return 0;
+}
+
+static int start_ext_thread(void);
+static int start_ext_thread(void)
+{
+	ext_thread0 = kthread_run(thread_function0, NULL, "ext-thread0");
+	if(ext_thread0 == NULL) {
+		pr_err("Cannot create kthread\n");
+		return -EBADE;
+	}
+
+	printk("Run ext_thread0\n");
+	return 0;
+}
+
+void stop_ext_thread(void);
+void stop_ext_thread(void)
+{
+	if (ext_thread0 != NULL) {
+		int res = kthread_stop(ext_thread0);
+		if (res != 0) {
+			pr_err("Cannot stop ext_thread0\n");
+		} else {
+			printk("Stopped ext_thread0\n");
+		}
+	}
+
+	return;
+}
+
+//----------------------------------------------------------------------------//
+
+//----------------------------------------------------------------------------//
+
+static struct task_struct *signal_thread = NULL;
+
+static void allow_signals(void)
+{
+	allow_signal(SIGTERM);
+}
+
+static int signal_thread_fn(void *arg)
+{
+	(void)arg;
+
+	while (!kthread_should_stop()) {
+		if (signal_pending(current)) {
+			printk("Pending signal SIGTERM in thread\n");
+		}
+		msleep(100);
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule();
+	}
+
+	return 0;
+}
+
+static int start_signal_thread(void);
+static int start_signal_thread(void)
+{
+	signal_thread = kthread_run(signal_thread_fn, NULL, "signal-thread");
+	if(signal_thread == NULL) {
+		pr_err("Cannot create signal kthread\n");
+		return -EBADE;
+	}
+
+	printk("Run signal_thread\n");
+	return 0;
+}
+
+void stop_signal_thread(void);
+void stop_signal_thread(void)
+{
+	if (signal_thread != NULL) {
+		int res = kthread_stop(signal_thread);
+		if (res != 0) {
+			pr_err("Cannot stop signal_thread\n");
+		} else {
+			printk("Stopped signal_thread\n");
+		}
+	}
+
+	return;
+}
+
+//----------------------------------------------------------------------------//
 
 //----------------------------------------------------------------------------//
 
@@ -462,18 +573,40 @@ static int __init example_init(void)
 {
 	printk(KERN_ALERT "Hello\n");
 
-	int res = create_proc();
+	int res = -1;
+
+	res = create_proc();
 	if (res != 0) {
 		return res;
 	}
 
 	res = init_dev();
 	if (res != 0) {
-		return res;
+		goto destroy_proc;
+	}
+
+	res = start_ext_thread();
+	if (res != 0) {
+		goto destroy_dev;
+	}
+
+	allow_signals();
+	res = start_signal_thread();
+	if (res != 0) {
+		goto stop_ext_thread;
 	}
 
 	print_module_name();
 	return 0;
+
+stop_ext_thread:
+	stop_ext_thread();
+destroy_dev:
+	destroy_dev();
+destroy_proc:
+	remove_proc();
+
+	return res;
 }
 
 static void __exit example_exit(void)
@@ -481,6 +614,8 @@ static void __exit example_exit(void)
 	print_module_name();
 
 	clear_all_file_name_nodes();
+	stop_signal_thread();
+	stop_ext_thread();
 	destroy_dev();
 	remove_proc();
 
