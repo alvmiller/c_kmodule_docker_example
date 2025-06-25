@@ -58,6 +58,7 @@ https://www.kernel.org/doc/html/v5.6/core-api/kernel-api.html
 https://embetronicx.com/tutorials/linux/device-drivers/linux-device-driver-tutorial-part-17-linked-list-in-linux-kernel/
 https://embetronicx.com/tutorials/linux/device-drivers/example-linked-list-in-linux-kernel/
 https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/include/linux/string.h
+https://man7.org/linux/man-pages/man7/signal.7.html
 
 
 Host:
