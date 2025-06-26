@@ -248,6 +248,110 @@ void stop_ext_thread(void)
 
 //----------------------------------------------------------------------------//
 
+DECLARE_WAIT_QUEUE_HEAD(recv_wait_queue);
+static struct task_struct *sender_thread;
+static struct task_struct *receiver_thread;
+const int SR_SIGNAL_VAL = SIGBUS;
+
+static void handle_signal(int signum)
+{
+	switch(signum) {
+	case SR_SIGNAL_VAL:
+		pr_info("Handling SIGBUS instruction\n");
+		break;
+	default:
+		printk("\tHandling %d signal\n", signum);
+		break;
+	}
+
+	return;
+}
+
+static int recv_thread_fn(void *data)
+{
+	(void)data;
+
+	allow_signal(SR_SIGNAL_VAL);
+	while(!kthread_should_stop()) {
+		wait_event_interruptible(
+			recv_wait_queue,
+			(signal_pending(current) || kthread_should_stop()));
+		long unsigned int *signum =
+			current->signal->shared_pending.signal.sig;
+		int tmp_val = SIGPOLL;
+		if ((*signum & 1 << (SR_SIGNAL_VAL - 1))
+			>> (SR_SIGNAL_VAL - 1) == 1) {
+			pr_info("recv SIGBUS signal\n");
+			tmp_val = SR_SIGNAL_VAL;
+		}
+		handle_signal(tmp_val);
+		flush_signals(current);
+		msleep(100);
+	}
+
+	return 0;
+}
+
+static int sender_thread_fn(void *data)
+{
+	(void)data;
+
+	while (!kthread_should_stop()) {
+		sigaddset(
+			&receiver_thread->signal->shared_pending.signal,
+			SR_SIGNAL_VAL);
+		send_sig(SR_SIGNAL_VAL, receiver_thread, 0);
+		msleep(50);
+	}
+
+	return 0;
+}
+
+void thread_stop(void);
+void thread_stop(void)
+{
+	if(sender_thread) {
+		kthread_stop(sender_thread);
+		sender_thread = NULL;
+	}
+	if(receiver_thread) {
+		kthread_stop(receiver_thread);
+		receiver_thread = NULL;
+	}
+
+	pr_info("Destroyed kthread signal send/recieve\n");
+	return;
+}
+
+void thread_start(void);
+void thread_start(void)
+{
+	pr_info("Starting kthread signal send/recieve...\n");;
+
+	receiver_thread = kthread_run(
+		recv_thread_fn,
+		NULL,
+		"kthread_signal-receiver_thread-example");
+	if (IS_ERR(receiver_thread)) {
+		pr_info("error in creating receiver thread\n");
+		return;
+	}
+	sender_thread = kthread_run(
+		sender_thread_fn,
+		NULL,
+		"kthread_signal-sender_thread-example");
+	if (IS_ERR(sender_thread)) {
+		pr_info("error in creating sender thread\n");
+		
+	}
+
+	return;
+}
+
+//----------------------------------------------------------------------------//
+
+//----------------------------------------------------------------------------//
+
 #define DRV_NAME "example_dev"
 
 static int drv_open(struct inode *inode, struct file *file)
@@ -387,18 +491,13 @@ static long int drv_ioctl(
 			}
 			return (long int)tmp;
 		}
-/*
 	case 0x13: {
-			printk("\tioctl() Use kthread0\n");
-			ret = start_ext_thread();
-			if (ret != 0) {
-				return ret;
-			}
-			msleep(400);
-			stop_ext_thread();
+			printk("\tioctl() Use kthread signal send/recieve\n");
+			thread_start();
+			msleep(300);
+			thread_stop();
 			break;
 		}
-*/
 	default:
 		pr_err("\tioctl() called with unknown command\n");
 		return -EINVAL;
