@@ -8,6 +8,32 @@
 #include <errno.h>
 #include <stdint.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
+#include <signal.h>
+
+void receiveData(int n, siginfo_t *info, void *unused)
+{
+	(void)unused;
+	printf("\t\tReceived value %i\n", info->si_int);
+}
+
+void get_signal_from_driver(int fd_dev)
+{
+#define SIG_TEST 44
+
+	struct sigaction sig = {};
+	sig.sa_sigaction = receiveData;
+	sig.sa_flags = SA_SIGINFO;
+	sigaction(SIG_TEST, &sig, NULL);
+
+	int pid = getpid();
+	printf("\t\tClient PID = %d\n", pid);
+	int ret = ioctl(fd_dev, 0x15, (int32_t *)&pid);
+	if (ret == -1) {
+		perror("\tCannot use ioctl()");
+	}
+	printf("/dev: ioctl() called\n");
+}
 
 int main()
 {
@@ -98,6 +124,16 @@ int main()
 		perror("\tCannot use ioctl()");
 	}
 	printf("/dev: ioctl() called\n");
+
+	int value = getpid();
+	printf("\t\tClient PID = %d\n", value);
+	ret = ioctl(fd_dev, 0x14, (int32_t *)&value);
+	if (ret == -1) {
+		perror("\tCannot use ioctl()");
+	}
+	printf("/dev: ioctl() called\n");
+
+	get_signal_from_driver(fd_dev);
 
 	close(fd_dev);
 	printf("/dev: Closed\n");
