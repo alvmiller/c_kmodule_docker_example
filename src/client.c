@@ -93,6 +93,14 @@ int main()
 	}
 	printf("/dev: Get ioctl() called (%ld)-(%d)\n", ret, errno);
 
+/*
+	ret = ioctl(fd_dev, 0x13);
+	if (ret == -1) {
+		perror("\tCannot use ioctl()");
+	}
+	printf("/dev: ioctl() called\n");
+*/
+
 	close(fd_dev);
 	printf("/dev: Closed\n");
 #endif
