@@ -141,7 +141,9 @@ enum Val_Operation {
 };
 
 static inline long int do_val_operation(
-	enum Val_Operation op, struct file *file, uint8_t *res_val)
+	enum Val_Operation op,
+	const struct file * const file,
+	uint8_t *res_val)
 {
 	static uint8_t value = 0;
 	long int ret = -1;
@@ -149,9 +151,10 @@ static inline long int do_val_operation(
 	if (file == NULL) {
 		return -EINVAL;
 	}
-	WARN_ON(!!file);
+	WARN_ON(!file);
+	//WARN_ON(!!file);
 
-	pr_info("\tDevice ioctl()\n");
+	pr_info("\tDevice for ioctl() function\n");
 	print_module_name();
 	print_file_name(file);
 
@@ -193,6 +196,52 @@ static inline long int do_val_operation(
 	mutex_unlock(&value_lock);
 
 	return ret;
+}
+
+//----------------------------------------------------------------------------//
+
+//----------------------------------------------------------------------------//
+
+static struct task_struct *ext_thread0 = NULL;
+
+static int thread_function0(void *pv)
+{
+	(void)pv;
+
+	printk("\t\tThread function...\n");
+	while(!kthread_should_stop()) {
+		msleep(100);
+	}
+
+	return 0;
+}
+
+static int start_ext_thread(void);
+static int start_ext_thread(void)
+{
+	ext_thread0 = kthread_run(thread_function0, NULL, "ext-thread0");
+	if(ext_thread0 == NULL) {
+		pr_err("Cannot create kthread\n");
+		return -EBADE;
+	}
+
+	printk("Run ext_thread0\n");
+	return 0;
+}
+
+void stop_ext_thread(void);
+void stop_ext_thread(void)
+{
+	if (ext_thread0 != NULL) {
+		int res = kthread_stop(ext_thread0);
+		if (res != 0) {
+			pr_err("Cannot stop ext_thread0\n");
+		} else {
+			printk("Stopped ext_thread0\n");
+		}
+	}
+
+	return;
 }
 
 //----------------------------------------------------------------------------//
@@ -338,6 +387,18 @@ static long int drv_ioctl(
 			}
 			return (long int)tmp;
 		}
+/*
+	case 0x13: {
+			printk("\tioctl() Use kthread0\n");
+			ret = start_ext_thread();
+			if (ret != 0) {
+				return ret;
+			}
+			msleep(400);
+			stop_ext_thread();
+			break;
+		}
+*/
 	default:
 		pr_err("\tioctl() called with unknown command\n");
 		return -EINVAL;
@@ -468,52 +529,6 @@ static void destroy_dev(void)
 
 //----------------------------------------------------------------------------//
 
-static struct task_struct *ext_thread0 = NULL;
-
-static int thread_function0(void *pv)
-{
-	(void)pv;
-
-	printk("\tThread function...\n");
-	while(!kthread_should_stop()) {
-		msleep(100);
-	}
-
-	return 0;
-}
-
-static int start_ext_thread(void);
-static int start_ext_thread(void)
-{
-	ext_thread0 = kthread_run(thread_function0, NULL, "ext-thread0");
-	if(ext_thread0 == NULL) {
-		pr_err("Cannot create kthread\n");
-		return -EBADE;
-	}
-
-	printk("Run ext_thread0\n");
-	return 0;
-}
-
-void stop_ext_thread(void);
-void stop_ext_thread(void)
-{
-	if (ext_thread0 != NULL) {
-		int res = kthread_stop(ext_thread0);
-		if (res != 0) {
-			pr_err("Cannot stop ext_thread0\n");
-		} else {
-			printk("Stopped ext_thread0\n");
-		}
-	}
-
-	return;
-}
-
-//----------------------------------------------------------------------------//
-
-//----------------------------------------------------------------------------//
-
 static struct task_struct *signal_thread = NULL;
 
 static void allow_signals(void)
@@ -525,6 +540,7 @@ static int signal_thread_fn(void *arg)
 {
 	(void)arg;
 
+	printk("\t\tSignal kthread function...\n");
 	while (!kthread_should_stop()) {
 		if (signal_pending(current)) {
 			printk("Pending signal SIGTERM in thread\n");
