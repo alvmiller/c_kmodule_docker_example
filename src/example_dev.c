@@ -1,3 +1,4 @@
+#include <asm/siginfo.h>
 #include <linux/cdev.h>
 #include <linux/dcache.h>
 #include <linux/delay.h>
@@ -13,6 +14,7 @@
 #include <linux/mutex.h>
 #include <linux/path.h>
 #include <linux/proc_fs.h>
+#include <linux/rcupdate.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/slab.h>
@@ -496,6 +498,60 @@ static long int drv_ioctl(
 			thread_start();
 			msleep(300);
 			thread_stop();
+			break;
+		}
+	case 0x14: {
+			printk("\tioctl() Use tid from ioctl\n");
+			int client_pid = -1;
+			if (copy_from_user(
+				&client_pid,
+				(int *)ioctl_param,
+				sizeof(int)) != 0) {
+				pr_err("\tioctl() can't copy data from user\n");
+				return -EINVAL;
+			}
+			printk("\t\tClient PID = %d\n", client_pid);
+			file->private_data = (void *)&client_pid;
+			printk("\t\tClient PID (pv) = %d\n", *((int *)file->private_data));
+			break;
+		}
+	case 0x15: {
+			printk("\tioctl() send signal to client\n");
+
+			#define SIG_TEST 44
+			int client_pid = -1;
+			if (copy_from_user(
+				&client_pid,
+				(int *)ioctl_param,
+				sizeof(int)) != 0) {
+				pr_err("\tioctl() can't copy data from user\n");
+				return -EINVAL;
+			}
+			printk("\t\tClient PID = %d\n", client_pid);
+			file->private_data = (void *)&client_pid;
+			printk("\t\tClient PID (pv) = %d\n", *((int *)file->private_data));
+
+			struct kernel_siginfo info = {};
+			struct task_struct *t = NULL;
+			memset(&info, 0, sizeof(struct kernel_siginfo));
+			info.si_signo = SIG_TEST;
+			info.si_code = SI_QUEUE;
+			info.si_int = 1234;
+			rcu_read_lock();
+			t = pid_task(find_vpid(client_pid), PIDTYPE_PID);
+			//t = find_task_by_vpid(client_pid);
+			if(t == NULL) {
+				printk("no such pid\n");
+				rcu_read_unlock();
+				return -ENODEV;
+			}
+			rcu_read_unlock();
+			ret = send_sig_info(SIG_TEST, &info, t);
+			if (ret < 0) {
+				printk("error sending signal\n");
+				return ret;
+			}
+	
 			break;
 		}
 	default:
