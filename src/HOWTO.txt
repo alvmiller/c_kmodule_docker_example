@@ -43,6 +43,7 @@ https://github.com/muratdemirtas/Linux-Kernel-Examples/blob/master/kernel-thread
 https://www.oreilly.com/library/view/linux-device-drivers/0596005903/ch08.html
 https://www.linkedin.com/pulse/memory-allocation-methods-linux-kernel-user-space-development-zhu-4llhc
 https://aeb.win.tue.nl/linux/lk/lk-5.html
+http://www.discoversdk.com/knowledge-base/sending-signal-to-user-space
 https://embetronicx.com/tutorials/linux/device-drivers/sending-signal-from-linux-device-driver-to-user-space/
 https://developer.ibm.com/articles/control-linux-kernel-extensions/
 https://www.c-pointers.com/LinuxDeviceDriver/basic_ldd/chapter2_kthreads/kthread_signal/kthread_signal.html
