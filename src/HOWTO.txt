@@ -122,4 +122,6 @@ ls -la /dev/ | grep example_dev
 ls -la /proc/ | grep example_dev
 sudo rmmod example_dev
 make clean
+--
+ptrace -p pid
 */
